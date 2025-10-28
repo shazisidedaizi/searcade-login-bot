@@ -17,7 +17,7 @@ async def tg_notify(message: str):
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     async with aiohttp.ClientSession() as session:
         try:
-            await session.post(url, data={"chat_id": chat_id, "text": message, "parse_mode": "HTML"})
+            await session.post(url, data={"chat_id": chat_id, "text": message, "parse_mode": "HTML", "disable_web_page_preview": True})
         except Exception as e:
             print(f"Warning: Telegram 消息发送失败: {e}")
 
@@ -45,16 +45,47 @@ async def tg_notify_photo(photo_path: str, caption: str = ""):
             except:
                 pass
 
+# ===================== Searcade 报告生成 =====================
+def build_searcade_report(results, start_time, end_time):
+    success = [r for r in results if r["success"]]
+    failed  = [r for r in results if not r["success"]]
+
+    lines = [
+        "Searcade 登录报告",
+        f"目标: <a href='{LOGIN_URL}'>服务器 #3759</a>",
+        f"时间: {start_time} → {end_time}",
+        f"结果: <b>{len(success)} 成功</b> | <b>{len(failed)} 失败</b>",
+        ""
+    ]
+
+    if success:
+        lines.append("Success 成功：")
+        lines.extend([f"   • <code>{r['email']}</code>" for r in success])
+        lines.append("")
+
+    if failed:
+        lines.append("Failed 失败：")
+        lines.extend([f"   • <code>{r['email']}</code>" for r in failed])
+
+    return "\n".join(lines)
+
 # ===================== 单账号登录 =====================
 async def login_one(email: str, password: str):
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-extensions",
+                "--window-size=1920,1080"
+            ]
         )
         context = await browser.new_context(
             viewport={"width": 1920, "height": 1080},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
         page.set_default_timeout(60000)
@@ -64,17 +95,16 @@ async def login_one(email: str, password: str):
         try:
             print(f"[{email}] 访问后台页面...")
             await page.goto(LOGIN_URL, wait_until="networkidle")
-
             current_url = page.url
             print(f"[{email}] 当前URL: {current_url}")
 
-            # 如果已经在目标页面，说明已登录
-            if "servers/3759" in current_url and "login" not in current_url:
+            # 如果已经在目标页 → 已登录
+            if "servers/3759" in current_url and "login" not in current_url.lower():
                 print(f"[{email}] 已登录！")
                 result["success"] = True
                 return result
 
-            # 等待登录页加载
+            # 等待登录页出现
             await page.wait_for_selector('button:has-text("Login")', timeout=15000)
             print(f"[{email}] 检测到登录页")
 
@@ -92,7 +122,13 @@ async def login_one(email: str, password: str):
         except Exception as e:
             screenshot = f"error_{email.replace('@', '_')}.png"
             await page.screenshot(path=screenshot, full_page=True)
-            await tg_notify_photo(screenshot, caption=f"<b>Failed: 登录失败</b>\n<code>{email}</code>\n<i>{str(e)}</i>\nURL: {page.url}")
+            await tg_notify_photo(screenshot,
+                caption=f"Searcade 登录失败\n"
+                        f"目标: <code>{LOGIN_URL}</code>\n"
+                        f"账号: <code>{email}</code>\n"
+                        f"错误: <i>{str(e)}</i>\n"
+                        f"URL: {page.url}"
+            )
             print(f"[{email}] 登录失败: {e}")
         finally:
             await context.close()
@@ -104,50 +140,29 @@ async def main():
     start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"登录任务开始: {start_time}")
 
-    # 从环境变量读取账号
+    # 读取账号
     accounts_str = os.getenv("LOGIN_ACCOUNTS")
     if not accounts_str:
-        msg = f"<b>Failed: 登录任务失败</b>\n未配置任何账号\n开始时间: {start_time}"
-        await tg_notify(msg)
-        print(msg)
+        await tg_notify("Failed: 未配置任何账号")
         return
 
     accounts = [a.strip() for a in accounts_str.split(",") if ":" in a]
     if not accounts:
-        msg = f"<b>Failed: LOGIN_ACCOUNTS 格式错误</b>\n应为 email:password,email2:password2\n开始时间: {start_time}"
-        await tg_notify(msg)
-        print(msg)
+        await tg_notify("Failed: LOGIN_ACCOUNTS 格式错误，应为 email:password")
         return
 
-    # 并发登录
+    # 并行登录
     tasks = []
     for acc in accounts:
         email, pwd = acc.split(":", 1)
         tasks.append(login_one(email, pwd))
 
-    results = await asyncio.gather(*tasks, return_exceptions=False)
+    results = await asyncio.gather(*tasks)
 
-    # 统计结果
-    success_count = sum(1 for r in results if r["success"])
-    fail_count = len(results) - success_count
     end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 构建消息
-    msg_lines = [
-        "<b>Login Task Completed</b>",
-        f"开始时间: <code>{start_time}</code>",
-        f"结束时间: <code>{end_time}</code>",
-        f"总账号: <b>{len(results)}</b>",
-        f"成功: <b>{success_count}</b>",
-        f"失败: <b>{fail_count}</b>",
-        "",
-        "<b>详细结果：</b>"
-    ]
-    for r in results:
-        status = "Success" if r["success"] else "Failed"
-        msg_lines.append(f"<code>{r['email']}</code>: {status}")
-
-    final_msg = "\n".join(msg_lines)
+    # 使用 Searcade 专属报告
+    final_msg = build_searcade_report(results, start_time, end_time)
     await tg_notify(final_msg)
     print(final_msg)
 
