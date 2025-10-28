@@ -42,45 +42,106 @@ async def tg_notify_photo(photo_path: str, caption: str = ""):
 async def login_one(email, password):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context()
+        context = await browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
         page = await context.new_page()
         page.set_default_timeout(60000)
         result = {"email": email, "success": False}
 
         try:
-            await page.goto(LOGIN_URL)
+            await page.goto(LOGIN_URL, wait_until="networkidle")
 
-            # ===== 邮箱输入 =====
-            email_selector = 'input[name="Email address or username"]'
-            await page.wait_for_selector(email_selector, state="visible", timeout=60000)
+            # ===== 智能查找邮箱输入框 =====
+            email_selectors = [
+                'input[placeholder*="Email address or username"]',
+                'input[name="email"]',
+                'input[name="username"]',
+                'input[name="login"]',
+                'input[type="text"]:below(:text("Email address or username"))',
+                'input[autocomplete="username"], input[autocomplete="email"]',
+            ]
+
+            email_selector = None
+            for sel in email_selectors:
+                try:
+                    if await page.locator(sel).is_visible(timeout=5000):
+                        email_selector = sel
+                        break
+                except:
+                    continue
+
+            if not email_selector:
+                screenshot = f"no_email_field_{email.replace('@', '_')}.png"
+                await page.screenshot(path=screenshot, full_page=True)
+                await tg_notify_photo(screenshot, caption=f"未找到邮箱输入框: {email}")
+                return result
+
             await page.fill(email_selector, email)
 
-            # ===== 密码输入 =====
-            password_selector = 'input[name="password"], input[type="password"]'
-            await page.wait_for_selector(password_selector, state="visible", timeout=60000)
+            # ===== 密码输入框 =====
+            password_selectors = [
+                'input[type="password"]',
+                'input[name="password"]',
+                'input[placeholder*="Password"]',
+                'input[type="text"]:below(:text("Password"))',
+            ]
+
+            password_selector = None
+            for sel in password_selectors:
+                try:
+                    if await page.locator(sel).is_visible(timeout=5000):
+                        password_selector = sel
+                        break
+                except:
+                    continue
+
+            if not password_selector:
+                raise Exception("未找到密码输入框")
+
             await page.fill(password_selector, password)
 
-            # ===== 点击登录 =====
-            login_btn_selector = 'button:has-text("Login")'
-            await page.wait_for_selector(login_btn_selector, state="visible", timeout=60000)
-            await page.click(login_btn_selector)
+            # ===== 点击登录按钮 =====
+            login_btn_selectors = [
+                'button:has-text("Login")',
+                'button[type="submit"]',
+                'input[type="submit"][value*="Login"]',
+                '.btn-primary:has-text("Login")',
+            ]
 
-            # 等待跳转
-            await page.wait_for_timeout(5000)
+            login_btn = None
+            for sel in login_btn_selectors:
+                try:
+                    if await page.locator(sel).is_visible(timeout=5000):
+                        login_btn = sel
+                        break
+                except:
+                    continue
 
+            if not login_btn:
+                raise Exception("未找到登录按钮")
+
+            await page.click(login_btn)
+
+            # 等待导航或错误提示
+            try:
+                await page.wait_for_url("**dashboard**", timeout=10000)
+                result["success"] = True
+            except:
+                await page.wait_for_url("**clientarea**", timeout=5000)
+                result["success"] = True
 
             current_url = page.url
-            if "dashboard" in current_url or "clientarea" in current_url:
-                result["success"] = True
-            else:
+            if not result["success"]:
                 screenshot = f"login_failed_{email.replace('@', '_')}.png"
                 await page.screenshot(path=screenshot, full_page=True)
-                await tg_notify_photo(screenshot, caption=f"❌ 登录失败: {email}, URL: {current_url}")
+                await tg_notify_photo(screenshot, caption=f"登录失败: {email}\nURL: {current_url}")
 
         except Exception as e:
             screenshot = f"error_{email.replace('@', '_')}.png"
             await page.screenshot(path=screenshot, full_page=True)
-            await tg_notify_photo(screenshot, caption=f"⚠️ 账号 {email} 登录出错: {e}")
+            await tg_notify_photo(screenshot, caption=f"账号 {email} 登录出错: {e}")
         finally:
             await context.close()
             await browser.close()
