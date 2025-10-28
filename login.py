@@ -51,16 +51,23 @@ async def login_one(email, password):
             await page.goto(LOGIN_URL)
 
             # ===== 邮箱输入 =====
-            email_selector = 'input[placeholder*="Email"], input[name="Email address or username"], input[type="email"]'
-            await page.wait_for_selector(email_selector)
+            email_selector = 'input[name="Email address or username"]'
+            await page.wait_for_selector(email_selector, state="visible", timeout=60000)
             await page.fill(email_selector, email)
 
             # ===== 密码输入 =====
-            await page.fill('input[type="Password"]', password)
+            password_selector = 'input[name="password"], input[type="password"]'
+            await page.wait_for_selector(password_selector, state="visible", timeout=60000)
+            await page.fill(password_selector, password)
 
-            # ===== 登录按钮 =====
-            await page.click('button:has-text("Login")')
+            # ===== 点击登录 =====
+            login_btn_selector = 'button:has-text("Login")'
+            await page.wait_for_selector(login_btn_selector, state="visible", timeout=60000)
+            await page.click(login_btn_selector)
+
+            # 等待跳转
             await page.wait_for_timeout(5000)
+
 
             current_url = page.url
             if "dashboard" in current_url or "clientarea" in current_url:
