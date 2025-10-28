@@ -51,7 +51,7 @@ async def login_one(email, password):
             await page.goto(LOGIN_URL)
 
             # ===== 邮箱输入 =====
-            email_selector = 'input[placeholder*="Email"], input[name="Email Address"], input[type="Email address or username"]'
+            email_selector = 'input[placeholder*="Email"], input[name="Email address or username"], input[type="email"]'
             await page.wait_for_selector(email_selector)
             await page.fill(email_selector, email)
 
