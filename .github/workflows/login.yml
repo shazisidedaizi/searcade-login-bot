@@ -3,7 +3,7 @@ name: Auto Login Every 8 Days
 on:
   schedule:
     - cron: '0 19 */8 * *'  # 每 8 天在 UTC 时间的零点执行
-
+  workflow_dispatch:        # 支持手动触发
 jobs:
   run-login:
     runs-on: ubuntu-latest
