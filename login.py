@@ -4,7 +4,7 @@ import aiohttp
 from datetime import datetime
 from playwright.async_api import async_playwright
 
-LOGIN_URL = "https://client.webhostmost.com/login"
+LOGIN_URL = "https://searcade.com/en/admin/servers/3759"
 
 # ===================== Telegram 通知 =====================
 async def tg_notify(message: str):
@@ -82,6 +82,8 @@ async def login_one(email, password):
 # ===================== 主流程 =====================
 async def main():
     start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 从环境变量中获取 LOGIN_ACCOUNTS
     accounts_str = os.getenv("LOGIN_ACCOUNTS")
     if not accounts_str:
         await tg_notify(f"❌ 登录任务失败：未配置任何账号\n开始时间: {start_time}")
