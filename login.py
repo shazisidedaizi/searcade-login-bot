@@ -45,7 +45,7 @@ async def login_one(email, password):
         context = await browser.new_context()
         page = await context.new_page()
         page.set_default_timeout(60000)
-        result = {"email": email, "success": False, "expire": None}
+        result = {"email": email, "success": False}
 
         try:
             await page.goto(LOGIN_URL)
@@ -65,16 +65,6 @@ async def login_one(email, password):
             current_url = page.url
             if "dashboard" in current_url or "clientarea" in current_url:
                 result["success"] = True
-
-                # ===== 抓取过期时间 =====
-                try:
-                    locator = page.locator("text=Time until suspension")
-                    text = await locator.text_content()
-                    if text:
-                        result["expire"] = text.split(":", 1)[1].strip()
-                except:
-                    result["expire"] = None
-
             else:
                 screenshot = f"login_failed_{email.replace('@', '_')}.png"
                 await page.screenshot(path=screenshot, full_page=True)
@@ -126,8 +116,7 @@ async def main():
     ]
     for r in results:
         status = "✅ 成功" if r["success"] else "❌ 失败"
-        expire_info = f" (过期时间: {r['expire']})" if r.get("expire") else ""
-        msg_lines.append(f"{r['email']}: {status}{expire_info}")
+        msg_lines.append(f"{r['email']}: {status}")
 
     await tg_notify("\n".join(msg_lines))
     print("\n".join(msg_lines))
