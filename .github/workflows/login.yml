@@ -2,9 +2,9 @@ name: Searcade Login
 
 on:
   schedule:
-    # 每 8 天运行一次（从 0 时开始）
-    - cron: '0 19 */8 * *'   # UTC 19:00，每 8 天一次
-  workflow_dispatch:        # 支持手动触发
+    # 每 8 天运行一次（北京时间 3:00）
+    - cron: '0 19 */8 * *'
+  workflow_dispatch:
 
 jobs:
   login:
@@ -17,15 +17,22 @@ jobs:
         with:
           python-version: '3.8'
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           pip install playwright aiohttp
-          playwright install chromium
-          sudo playwright install-deps  # 解决依赖警告
 
-      - name: Run login
+      - name: Install Playwright browsers
+        run: |
+          python -m playwright install chromium
+
+      - name: Install system dependencies (fix missing libs)
+        run: |
+          python -m playwright install-deps
+
+      - name: Run login script
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           LOGIN_ACCOUNTS: ${{ secrets.LOGIN_ACCOUNTS }}
-        run: python login.py
+        run: |
+          python login.py
