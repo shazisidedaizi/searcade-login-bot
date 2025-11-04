@@ -2,8 +2,7 @@ name: Searcade Login
 
 on:
   schedule:
-    # 每 8 天运行一次（北京时间 3:00）
-    - cron: '0 19 */8 * *'
+    - cron: '13 22 */8 * *'    # 每8天 UTC 22点13分
   workflow_dispatch:
 
 jobs:
