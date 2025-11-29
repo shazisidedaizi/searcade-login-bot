@@ -2,7 +2,7 @@ name: Searcade Login
 
 on:
   schedule:
-    - cron: '13 22 */8 * *'    # 每8天 UTC 22点13分
+    - cron: '13 22 */7 * *'    # 每8天 UTC 22点13分
   workflow_dispatch:
 
 jobs:
